@@ -1,0 +1,137 @@
+---
+title: 'Peer-graded Assignment: Machine learning Course Project'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive summary 
+
+The goal of your project is to predict the manner in which the participants did the exercise.
+
+
+## 1. Question
+In which manner they did the participants the exercise?
+
+
+## 2. Input data 
+
+Weight Lifting Exercises Dataset. 
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+The data for this project was generously offered by: http://groupware.les.inf.puc-rio.br/har. 
+
+
+### Load data & tidy up
+(Larger K=less bias, more variance; smaller k= more bias, less variance--> 20=accurate )
+```{r results='hide', message=FALSE, warning=FALSE}
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(caret)
+library(rpart)
+library(randomForest)
+
+testing<-read.csv("pml-testing.csv")
+training<-read.csv("pml-training.csv")
+testing$classe
+#-->Note: "classe" is not a variable of the testing dataset
+
+training <- training[, colSums(is.na(training)) == 0]
+
+
+# delete unnecessary data (timestamp etc)
+training[3,1:10]
+training <- training[, -c(1:7)]
+
+```
+
+
+### Cross validation as there is no variable "classe" in the testing data set. Split: training data 60%, testing data 40% 
+```{r results='hide', message=FALSE, warning=FALSE}
+
+#transform factors in numeric vectors
+for(i in 1:85){
+if (class(training[,i])=="factor")
+    {training[,i]<-as.numeric(training[,i])}}
+
+inTrain<-createDataPartition(y=training$classe,p=0.60,list=FALSE)
+training_set<-training[inTrain,]
+testing_set<-training[-inTrain,]
+
+```
+
+
+## 3. Algorithm 
+
+
+### Classification tree
+
+```{r message=FALSE, warning=FALSE}
+ModFitDecTree <- rpart(classe ~ ., data=training_set, method="class")
+pred_decTree<-predict(ModFitDecTree,newdata = testing_set,type="class")
+confusionMatrix(pred_decTree,testing_set$classe)
+
+```
+
+### Random Forest
+```{r message=FALSE, warning=FALSE}
+
+set.seed(3141600)
+ModelFit_rf <- randomForest(classe~., data=training_set, importance=TRUE, ntree=100)
+
+pred_rf<-predict(ModelFit_rf,newdata = testing_set)
+confusionMatrix(pred_rf,testing_set$classe)
+
+```
+
+As there are some variables in the testing data , which just just "NAs", we will use not all variables to answer the QUIZ.
+To find the most important variables, we are using varImpPlot.
+
+
+```{r message=FALSE, warning=FALSE}
+varImpPlot(ModelFit_rf)
+set.seed(3141600)
+
+ModelFit_rf2 <- randomForest(classe~yaw_belt+roll_belt+magnet_dumbbell_z+pitch_belt+pitch_forearm+gyros_arm_y, data=training_set, importance=TRUE, ntree=100)
+
+pred_rf2<-predict(ModelFit_rf2,newdata = testing_set)
+confusionMatrix(pred_rf2,testing_set$classe)
+
+```
+
+## 4. Results
+
+The following Accuracy have our models:
+
+Classification tree: 0.7552 
+Random Forest with all variables: 0.9926
+Random Forest with the 6 most important variables: 0.9749
+
+Therefore the Random Forest model with all variables is the best prediction model. But for the sprecific testing data the Random Forest with the 6 most important variables is the the accurate one. 
+
+
+
+```{r message=FALSE, warning=FALSE}
+pred<-predict(ModelFit_rf2,newdata = testing)
+pred
+
+```
+
+## APPENDIX:
+
+
+
+```{r message=FALSE, warning=FALSE}
+
+#some additional analysis
+featurePlot(x=training_set[,c("yaw_belt","roll_belt","magnet_dumbbell_z","pitch_belt","pitch_forearm","gyros_arm_y")],y=training_set$classe,plot="box")
+
+data<-group_by(training_set, classe)
+data1<-summarize_each(data,funs(mean(., na.rm = TRUE)))
+```
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz4rpKV18aZ
